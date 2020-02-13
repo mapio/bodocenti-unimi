@@ -20,11 +20,11 @@ except ImportError:
   sys.exit(1)
 
 def table2csv(name, table):
-    with open(name, 'w') as ouf:
-        writer = csv.writer(ouf, delimiter = '\t', quotechar = '"', quoting = csv.QUOTE_MINIMAL)
+    with open(name, 'w', encoding = 'utf-8', newline = '') as ouf:
+        writer = csv.writer(ouf, delimiter = '\t', quotechar = '"', quoting = csv.QUOTE_MINIMAL, lineterminator = '\n')
         tag = 'th'
         for r in table.find_elements_by_tag_name('tr'):
-            writer.writerow(c.text for c in r.find_elements_by_tag_name(tag))
+            writer.writerow(c.text.strip() for c in r.find_elements_by_tag_name(tag))
             tag = 'td'
 
 def download(user, password, dir = '.', nome = None, chiusi = False, inserimento = False):
