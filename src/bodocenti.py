@@ -4,15 +4,15 @@ import csv
 from pathlib import Path
 import sys
 
-# dalla colonna "Fase"
+# dalla colonna 'Fase'
 
 APERTO, INSERIMENTO, CHIUSO = 'aperte', 'nserimento', 'hiuso'
 
 try:
   from selenium import webdriver
   from selenium.common.exceptions import NoSuchElementException
-  from selenium.webdriver.common.keys import Keys
   from selenium.webdriver.common.by import By
+  from selenium.webdriver.common.keys import Keys
   from selenium.webdriver.support.ui import WebDriverWait
   from selenium.webdriver.support import expected_conditions as EC
 except ImportError:
@@ -23,35 +23,33 @@ def table2csv(name, table):
     with open(name, 'w', encoding = 'utf-8', newline = '') as ouf:
         writer = csv.writer(ouf, delimiter = '\t', quotechar = '"', quoting = csv.QUOTE_MINIMAL, lineterminator = '\n')
         tag = 'th'
-        for r in table.find_elements_by_tag_name('tr'):
-            writer.writerow(c.text.strip() for c in r.find_elements_by_tag_name(tag))
+        for r in table.find_elements(By.TAG_NAME, 'tr'):
+            writer.writerow(c.text.strip() for c in r.find_elements(By.TAG_NAME, tag))
             tag = 'td'
 
 def download(user, password, dir = '.', nome = None, chiusi = False, inserimento = False):
   options = webdriver.FirefoxOptions()
   options.headless = True
+  options.set_preference('profile.default_content_settings.popups', 0);
 
-  profile = webdriver.FirefoxProfile()
-  profile.set_preference("profile.default_content_settings.popups", 0);
+  driver = webdriver.Firefox(options = options)
 
-  driver = webdriver.Firefox(options = options, firefox_profile = profile)
+  driver.get('https://work.unimi.it/boDocenti/ListaAppelliEIscritti')
 
-  driver.get("https://work.unimi.it/boDocenti/ListaAppelliEIscritti")
-
-  elem = driver.find_element_by_id("username")
+  elem = driver.find_element(By.ID, 'username')
   elem.clear()
   elem.send_keys(user)
 
-  elem = driver.find_element_by_id("password")
+  elem = driver.find_element(By.ID, 'password')
   elem.clear()
   elem.send_keys(password)
   elem.send_keys(Keys.RETURN)
 
-  WebDriverWait(driver, 10).until(EC.title_contains("Lista appelli"))
-  driver.find_element_by_id('id1d').click()
+  WebDriverWait(driver, 10).until(EC.title_contains('Lista appelli'))
+  driver.find_element(By.ID, 'id1d').click()
 
   good_idxs = []
-  for idx, row in enumerate(driver.find_elements_by_tag_name("tr")):
+  for idx, row in enumerate(driver.find_elements(By.TAG_NAME, 'tr')):
     if (
           ((APERTO in row.text) or
           (inserimento and INSERIMENTO in row.text) or
@@ -64,9 +62,9 @@ def download(user, password, dir = '.', nome = None, chiusi = False, inserimento
   print('\nTrovati {} appelli...\n'.format(len(good_idxs)))
 
   for idx in good_idxs:
-      row = driver.find_elements_by_tag_name("tr")[idx]
+      row = driver.find_elements(By.TAG_NAME, 'tr')[idx]
 
-      ds = row.find_elements_by_tag_name('td')
+      ds = row.find_elements(By.TAG_NAME, 'td')
 
       insegnamento = ds[0].text
       data = ds[1].text
@@ -100,11 +98,11 @@ Elenco salvato in:    {}
         path
       ))
 
-      row.find_element_by_tag_name('a').click()
-      WebDriverWait(driver, 10).until(EC.title_contains("Elenco studenti"))
+      row.find_element(By.TAG_NAME, 'a').click()
+      WebDriverWait(driver, 10).until(EC.title_contains('Elenco studenti'))
 
       try:
-          iscr = driver.find_element_by_tag_name('table')
+          iscr = driver.find_element(By.TAG_NAME, 'table')
           table2csv(path, iscr)
       except NoSuchElementException:
           pass
@@ -113,7 +111,7 @@ Elenco salvato in:    {}
 
   driver.close()
 
-if __name__ == "__main__":
+if __name__ == '__main__':
 
   from argparse import ArgumentParser
   from getpass import getpass
@@ -134,12 +132,12 @@ if __name__ == "__main__":
     try:
       user = environ['BODOCENTI_USER']
     except KeyError:
-      user = input("User: ")
+      user = input('User: ')
 
   try:
     password = environ['BODOCENTI_PASSWORD']
   except KeyError:
-    password = getpass(prompt = "Password: ")
+    password = getpass(prompt = 'Password: ')
 
   if not Path(args.dir).is_dir():
     sys.stderr.write('bodocenti: la directory "{}" non esiste'.format(args.dir))
