@@ -21,14 +21,6 @@ except ImportError:
   sys.stderr.write('bodocenti: è necessario installare Selenium per il corretto funzionamento dello script!')
   sys.exit(1)
 
-def table2csv(name, table):
-    with open(name, 'w', encoding = 'utf-8', newline = '') as ouf:
-        writer = csv.writer(ouf, delimiter = '\t', quotechar = '"', quoting = csv.QUOTE_MINIMAL, lineterminator = '\n')
-        tag = 'th'
-        for r in table.find_elements(By.TAG_NAME, 'tr'):
-            writer.writerow(c.text.strip() for c in r.find_elements(By.TAG_NAME, tag))
-            tag = 'td'
-
 def download(user, password, dir = '.', nome = None, chiusi = False, inserimento = False):
   options = Options()
   options.add_argument('--headless')
@@ -71,7 +63,6 @@ def download(user, password, dir = '.', nome = None, chiusi = False, inserimento
 
   for idx in good_idxs:
       row = driver.find_elements(By.TAG_NAME, 'tr')[idx]
-
       ds = row.find_elements(By.TAG_NAME, 'td')
 
       insegnamento = ds[0].text
@@ -82,45 +73,46 @@ def download(user, password, dir = '.', nome = None, chiusi = False, inserimento
       tipo = ds[5].text
       presidente = ds[6].text
 
-      path = Path(dir) / '{}@{}.tsv'.format(
+      path = Path(dir) / '{}@{}.xls'.format(
         insegnamento[:ds[0].text.index('(') - 1].replace(' ', '_'),
         '-'.join(data.split('/')[::-1])
       )
 
-      print("""Insegnamento:         {}
-Data appello:         {}
-Data fine iscrizioni: {}
-Fase:                 {}
-Iscritti:             {}
-Tipo:                 {}
-Presidente:           {}
-Elenco salvato in:    {}
-      """.format(
-        insegnamento,
-        data,
-        chiusura,
-        fase,
-        iscritti,
-        tipo,
-        presidente,
-        path
-      ))
-
       row.find_element(By.TAG_NAME, 'a').click()
       WebDriverWait(driver, 10).until(EC.title_contains('Elenco studenti'))
 
+      before = set(Path(dir).glob('*.xls'))
       try:
         driver.find_element(By.NAME, 'xlsExport').click()
       except ElementClickInterceptedException:
-         pass
-      
-      try:
-          iscr = driver.find_element(By.TAG_NAME, 'table')
-          table2csv(path, iscr)
-      except NoSuchElementException:
-          pass
+        print(f"""Insegnamento:         {insegnamento}
+Data appello:         {data}
+Data fine iscrizioni: {chiusura}
+Fase:                 {fase}
+Iscritti:             {iscritti}
+Tipo:                 {tipo}
+Presidente:           {presidente}
+        """)
+      else:
+        while True:
+          after = set(Path(dir).glob('*.xls'))
+          if after - before:
+            break
 
-      driver.back()
+        xls = (after - before).pop()
+        xls.rename(path)
+
+        print(f"""Insegnamento:         {insegnamento}
+Data appello:         {data}
+Data fine iscrizioni: {chiusura}
+Fase:                 {fase}
+Iscritti:             {iscritti}
+Tipo:                 {tipo}
+Presidente:           {presidente}
+Elenco salvato in:    {path}
+        """)
+      finally:
+        driver.back()
 
   driver.close()
 
