@@ -10,7 +10,9 @@ APERTO, INSERIMENTO, CHIUSO = 'aperte', 'nserimento', 'hiuso'
 
 try:
   from selenium import webdriver
-  from selenium.common.exceptions import NoSuchElementException
+  from selenium.webdriver.firefox.options import Options
+  from selenium.webdriver.firefox.firefox_profile import FirefoxProfile
+  from selenium.common.exceptions import NoSuchElementException, ElementClickInterceptedException
   from selenium.webdriver.common.by import By
   from selenium.webdriver.common.keys import Keys
   from selenium.webdriver.support.ui import WebDriverWait
@@ -28,9 +30,15 @@ def table2csv(name, table):
             tag = 'td'
 
 def download(user, password, dir = '.', nome = None, chiusi = False, inserimento = False):
-  options = webdriver.FirefoxOptions()
+  options = Options()
   options.add_argument('--headless')
   options.set_preference('profile.default_content_settings.popups', 0);
+  profile = FirefoxProfile()
+  profile.set_preference("browser.download.folderList", 2)
+  profile.set_preference("browser.download.manager.showWhenStarting", False)
+  profile.set_preference("browser.download.dir", dir)
+  profile.set_preference("browser.helperApps.neverAsk.saveToDisk", "application/vnd.ms-excel")
+  options.profile = profile
 
   driver = webdriver.Firefox(options = options)
 
@@ -102,6 +110,11 @@ Elenco salvato in:    {}
       WebDriverWait(driver, 10).until(EC.title_contains('Elenco studenti'))
 
       try:
+        driver.find_element(By.NAME, 'xlsExport').click()
+      except ElementClickInterceptedException:
+         pass
+      
+      try:
           iscr = driver.find_element(By.TAG_NAME, 'table')
           table2csv(path, iscr)
       except NoSuchElementException:
@@ -139,11 +152,12 @@ if __name__ == '__main__':
   except KeyError:
     password = getpass(prompt = 'Password: ')
 
-  if not Path(args.dir).is_dir():
-    sys.stderr.write('bodocenti: la directory "{}" non esiste'.format(args.dir))
+  p = Path(args.dir).absolute()
+  if not p.is_dir():
+    sys.stderr.write('bodocenti: la directory "{}" non esiste'.format(str(p)))
     sys.exit(1)
 
-  download(user, password, args.dir, args.nome, args.chiusi, args.inserimento)
+  download(user, password, str(p), args.nome, args.chiusi, args.inserimento)
   try:
     Path('geckodriver.log').unlink()
   except FileNotFoundError:
