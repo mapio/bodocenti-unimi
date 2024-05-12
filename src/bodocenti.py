@@ -29,7 +29,7 @@ def table2csv(name, table):
 
 def download(user, password, dir = '.', nome = None, chiusi = False, inserimento = False):
   options = webdriver.FirefoxOptions()
-  options.headless = True
+  options.add_argument('--headless')
   options.set_preference('profile.default_content_settings.popups', 0);
 
   driver = webdriver.Firefox(options = options)
@@ -46,7 +46,7 @@ def download(user, password, dir = '.', nome = None, chiusi = False, inserimento
   elem.send_keys(Keys.RETURN)
 
   WebDriverWait(driver, 10).until(EC.title_contains('Lista appelli'))
-  driver.find_element(By.ID, 'id1d').click()
+  driver.find_element(By.NAME, 'cerca').click()
 
   good_idxs = []
   for idx, row in enumerate(driver.find_elements(By.TAG_NAME, 'tr')):
