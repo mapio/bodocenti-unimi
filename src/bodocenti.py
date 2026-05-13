@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 
-import csv
+from collections import namedtuple
 from pathlib import Path
 import sys
+
+Appello = namedtuple('Appello', ['insegnamento', 'data', 'chiusura', 'fase', 'iscritti', 'tipo', 'presidente', 'idx'])
 
 # dalla colonna 'Fase'
 
@@ -10,9 +12,9 @@ APERTO, INSERIMENTO, CHIUSO = 'aperte', 'nserimento', 'hiuso'
 
 try:
   from selenium import webdriver
+  from selenium.webdriver.firefox.webdriver import WebDriver as Firefox
   from selenium.webdriver.firefox.options import Options
-  from selenium.webdriver.firefox.firefox_profile import FirefoxProfile
-  from selenium.common.exceptions import NoSuchElementException, ElementClickInterceptedException
+  from selenium.common.exceptions import ElementClickInterceptedException
   from selenium.webdriver.common.by import By
   from selenium.webdriver.common.keys import Keys
   from selenium.webdriver.support.ui import WebDriverWait
@@ -21,18 +23,19 @@ except ImportError:
   sys.stderr.write('bodocenti: è necessario installare Selenium per il corretto funzionamento dello script!')
   sys.exit(1)
 
-def download(user, password, dir = '.', nome = None, chiusi = False, inserimento = False):
-  options = Options()
-  options.add_argument('--headless')
-  options.set_preference('profile.default_content_settings.popups', 0);
-  profile = FirefoxProfile()
-  profile.set_preference("browser.download.folderList", 2)
-  profile.set_preference("browser.download.manager.showWhenStarting", False)
-  profile.set_preference("browser.download.dir", dir)
-  profile.set_preference("browser.helperApps.neverAsk.saveToDisk", "application/vnd.ms-excel")
-  options.profile = profile
+def click(driver, locator, timeout=10):
+  WebDriverWait(driver, timeout).until(EC.element_to_be_clickable(locator)).click()
 
-  driver = webdriver.Firefox(options = options)
+def download(user, password, dir = Path('.'), nome = None, chiusi = False, inserimento = False):
+  options = Options()
+  options.add_argument('-headless')
+  options.set_preference("browser.download.folderList", 2)
+  options.set_preference("browser.download.manager.showWhenStarting", False)
+  options.set_preference("browser.download.dir", str(dir))
+  options.set_preference("browser.helperApps.neverAsk.saveToDisk", "application/vnd.ms-excel")
+  options.enable_downloads = True
+
+  driver = Firefox(options = options)
 
   driver.get('https://work.unimi.it/boDocenti/ListaAppelliEIscritti')
 
@@ -46,9 +49,9 @@ def download(user, password, dir = '.', nome = None, chiusi = False, inserimento
   elem.send_keys(Keys.RETURN)
 
   WebDriverWait(driver, 10).until(EC.title_contains('Lista appelli'))
-  driver.find_element(By.NAME, 'cerca').click()
+  click(driver, (By.NAME, 'cerca'))
 
-  good_idxs = []
+  appelli = []
   for idx, row in enumerate(driver.find_elements(By.TAG_NAME, 'tr')):
     if (
           ((APERTO in row.text) or
@@ -57,62 +60,47 @@ def download(user, password, dir = '.', nome = None, chiusi = False, inserimento
         and
           (nome is None or (nome.lower() in row.text.lower()))
         ):
-        good_idxs.append(idx)
-
-  print('\nTrovati {} appelli...\n'.format(len(good_idxs)))
-
-  for idx in good_idxs:
-      row = driver.find_elements(By.TAG_NAME, 'tr')[idx]
       ds = row.find_elements(By.TAG_NAME, 'td')
+      appelli.append(Appello(
+          insegnamento = (ds[0].text[:ds[0].text.index('(') - 1] if '(' in ds[0].text else ds[0].text).replace(' ', '_'),
+          data         = '-'.join(ds[1].text.split('/')[::-1]),
+          chiusura     = '-'.join(ds[2].text.split('/')[::-1]),
+          fase         = ds[3].text,
+          iscritti     = int(ds[4].text),
+          tipo         = ds[5].text,
+          presidente   = ds[6].text,
+          idx          = idx,
+      ))
 
-      insegnamento = ds[0].text
-      data = ds[1].text
-      chiusura = ds[2].text
-      fase = ds[3].text
-      iscritti = ds[4].text
-      tipo = ds[5].text
-      presidente = ds[6].text
+  print(f'\nTrovati {len(appelli)} appelli...')
 
-      path = Path(dir) / '{}@{}.xls'.format(
-        insegnamento[:ds[0].text.index('(') - 1].replace(' ', '_'),
-        '-'.join(data.split('/')[::-1])
-      )
+  for a in appelli:
+    print(f'''
+Insegnamento:         {a.insegnamento}
+Data appello:         {a.data}
+Data fine iscrizioni: {a.chiusura}
+Fase:                 {a.fase}
+Iscritti:             {a.iscritti}
+Tipo:                 {a.tipo}
+Presidente:           {a.presidente}''')
+    if a.iscritti == 0: continue
 
-      row.find_element(By.TAG_NAME, 'a').click()
-      WebDriverWait(driver, 10).until(EC.title_contains('Elenco studenti'))
+    click(driver, driver.find_elements(By.TAG_NAME, 'tr')[a.idx].find_element(By.TAG_NAME, 'a'))
+    WebDriverWait(driver, 10).until(EC.title_contains('Elenco studenti'))
 
-      before = set(Path(dir).glob('*.xls'))
-      try:
-        driver.find_element(By.NAME, 'xlsExport').click()
-      except ElementClickInterceptedException:
-        print(f"""Insegnamento:         {insegnamento}
-Data appello:         {data}
-Data fine iscrizioni: {chiusura}
-Fase:                 {fase}
-Iscritti:             {iscritti}
-Tipo:                 {tipo}
-Presidente:           {presidente}
-        """)
-      else:
-        while True:
-          after = set(Path(dir).glob('*.xls'))
-          if after - before:
-            break
-
-        xls = (after - before).pop()
-        xls.rename(path)
-
-        print(f"""Insegnamento:         {insegnamento}
-Data appello:         {data}
-Data fine iscrizioni: {chiusura}
-Fase:                 {fase}
-Iscritti:             {iscritti}
-Tipo:                 {tipo}
-Presidente:           {presidente}
-Elenco salvato in:    {path}
-        """)
-      finally:
-        driver.back()
+    before = set(dir.glob('*.xls'))
+    click(driver, (By.NAME, 'xlsExport'))
+    after = WebDriverWait(driver, 30).until(
+      lambda _: set(dir.glob('*.xls')) - before
+    )
+    if len(after) != 1:
+      raise RuntimeError(f'Più di un file XLS scaricato, trovati {len(after)}: {after}')
+    xls = after.pop()
+    path = dir / f'{a.insegnamento}@{a.data}.xls'
+    xls.rename(path)
+    print(f'Downloaded:           {path.name}')
+    driver.back()
+    WebDriverWait(driver, 10).until(EC.title_contains('Lista appelli'))
 
   driver.close()
 
@@ -144,12 +132,12 @@ if __name__ == '__main__':
   except KeyError:
     password = getpass(prompt = 'Password: ')
 
-  p = Path(args.dir).absolute()
-  if not p.is_dir():
-    sys.stderr.write('bodocenti: la directory "{}" non esiste'.format(str(p)))
+  path = Path(args.dir).absolute()
+  if not path.is_dir():
+    sys.stderr.write(f'bodocenti: la directory "{str(path)}" non esiste')
     sys.exit(1)
 
-  download(user, password, str(p), args.nome, args.chiusi, args.inserimento)
+  download(user, password, path, args.nome, args.chiusi, args.inserimento)
   try:
     Path('geckodriver.log').unlink()
   except FileNotFoundError:

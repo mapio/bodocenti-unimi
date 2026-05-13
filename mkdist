@@ -5,6 +5,6 @@ python3 -m venv venv
 source ./venv/bin/activate
 
 pip install selenium pyinstaller
-pyinstaller --onefile --noconsole --hiddenimport selenium src/bodocenti.py
+pyinstaller --onefile --collect-all selenium src/bodocenti.py
 
 rm -rf build venv src/__pycache__ bodocenti.spec
